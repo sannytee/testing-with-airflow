@@ -76,76 +76,86 @@ dag = DAG(
 )
 
 # Launch Spark Submit job to union transactions
-union_transactions = SparkSubmitOperator(
-    dag=dag,
-    conn_id='spark',
-    task_id='union_transactions',
-    name="App: union transactions",
-    application=os.path.join(SPARK_DIRECTORY, "union_transactions.py"),
-    application_args=['-e', "{0}".format(ENVIRONMENT)]
-)
-
-# Test union transactions
-test_union_transactions = BashOperator(
-    task_id='test_union_transactions',
-    bash_command=pytest_cmd.format(
-        environment=ENVIRONMENT,
-        directory=TESTS_DIRECTORY,
-        spark_directory=SPARK_DIRECTORY,
-        script='test_union_transactions.py',
-        spark_home=SPARK_HOME),
-    dag=dag)
-
-# Launch Spark Submit job to enrich the transactions
-enrich_transactions = SparkSubmitOperator(
-    dag=dag,
-    conn_id='spark',
-    task_id='enrich_transactions',
-    name="App: enrich transactions",
-    application=os.path.join(SPARK_DIRECTORY, "enrich_transactions.py"),
-    application_args=['-e', "{0}".format(ENVIRONMENT)]
-)
-
-# Test enrich transactions
-test_enrich_transactions = BashOperator(
-    task_id='test_enrich_transactions',
-    bash_command=pytest_cmd.format(
-        environment=ENVIRONMENT,
-        directory=TESTS_DIRECTORY,
-        spark_directory=SPARK_DIRECTORY,
-        script='test_enrich_transactions.py',
-        spark_home=SPARK_HOME),
-    dag=dag)
+# union_transactions = SparkSubmitOperator(
+#     dag=dag,
+#     conn_id='spark',
+#     task_id='union_transactions',
+#     name="App: union transactions",
+#     application=os.path.join(SPARK_DIRECTORY, "union_transactions.py"),
+#     application_args=['-e', "{0}".format(ENVIRONMENT)]
+# )
+#
+# # Test union transactions
+# test_union_transactions = BashOperator(
+#     task_id='test_union_transactions',
+#     bash_command=pytest_cmd.format(
+#         environment=ENVIRONMENT,
+#         directory=TESTS_DIRECTORY,
+#         spark_directory=SPARK_DIRECTORY,
+#         script='test_union_transactions.py',
+#         spark_home=SPARK_HOME),
+#     dag=dag)
+#
+# # Launch Spark Submit job to enrich the transactions
+# enrich_transactions = SparkSubmitOperator(
+#     dag=dag,
+#     conn_id='spark',
+#     task_id='enrich_transactions',
+#     name="App: enrich transactions",
+#     application=os.path.join(SPARK_DIRECTORY, "enrich_transactions.py"),
+#     application_args=['-e', "{0}".format(ENVIRONMENT)]
+# )
+#
+# # Test enrich transactions
+# test_enrich_transactions = BashOperator(
+#     task_id='test_enrich_transactions',
+#     bash_command=pytest_cmd.format(
+#         environment=ENVIRONMENT,
+#         directory=TESTS_DIRECTORY,
+#         spark_directory=SPARK_DIRECTORY,
+#         script='test_enrich_transactions.py',
+#         spark_home=SPARK_HOME),
+#     dag=dag)
 
 # Launch a Spark Submit job to filter out unwanted countries
-filter_countries = SparkSubmitOperator(
-    dag=dag,
-    conn_id='spark',
-    task_id='filter_countries',
-    name="App: filter countries",
-    application=os.path.join(SPARK_DIRECTORY, "filter_countries.py"),
-    application_args=['-e', "{0}".format(ENVIRONMENT)]
-)
+# filter_countries = SparkSubmitOperator(
+#     dag=dag,
+#     conn_id='spark',
+#     task_id='filter_countries',
+#     name="App: filter countries",
+#     application=os.path.join(SPARK_DIRECTORY, "filter_countries.py"),
+#     application_args=['-e', "{0}".format(ENVIRONMENT)]
+# )
 
 # Test filter countries
+
 test_filter_countries = BashOperator(
     task_id='test_filter_countries',
-    bash_command=pytest_cmd.format(
-        environment=ENVIRONMENT,
-        directory=TESTS_DIRECTORY,
-        spark_directory=SPARK_DIRECTORY,
-        script='test_filter_countries.py',
-        spark_home=SPARK_HOME),
+    bash_command='echo "hello_world"',
     dag=dag)
+
 
 # Trigger the next environment based on current environment
 if ENVIRONMENT != 'prd':
     if ENVIRONMENT == 'dev':
+        promote_branch_to_test = BashOperator(
+            task_id='promote_branch_to_test',
+            bash_command="""
+                cd {}/ &&
+                git checkout test &&
+                git pull &&
+                git merge origin/development &&
+                git push
+            """.format(DAG_LOCATION),
+            dag=dag
+        )
+
         trigger_next_environment_deploy = TriggerDagRunOperator(task_id='trigger_next_environment_deploy',
                                                                 python_callable=lambda context, dag_run: dag_run,
                                                                 trigger_dag_id="awesome_dag_tst",
                                                                 dag=dag)
-        trigger_next_environment_deploy.set_upstream(test_filter_countries)
+
+        test_filter_countries >> promote_branch_to_test >> trigger_next_environment_deploy
 
     elif ENVIRONMENT == 'tst':
         trigger_next_environment_deploy = TriggerDagRunOperator(task_id='trigger_next_environment_deploy',
@@ -155,8 +165,8 @@ if ENVIRONMENT != 'prd':
         trigger_next_environment_deploy.set_upstream(test_filter_countries)
 
 # Set order of tasks
-union_transactions.set_downstream(test_union_transactions)
-test_union_transactions.set_downstream(enrich_transactions)
-enrich_transactions.set_downstream(test_enrich_transactions)
-test_enrich_transactions.set_downstream(filter_countries)
-filter_countries.set_downstream(test_filter_countries)
+# union_transactions.set_downstream(test_union_transactions)
+# test_union_transactions.set_downstream(enrich_transactions)
+# enrich_transactions.set_downstream(test_enrich_transactions)
+# test_enrich_transactions.set_downstream(filter_countries)
+# filter_countries.set_downstream(test_filter_countries)
